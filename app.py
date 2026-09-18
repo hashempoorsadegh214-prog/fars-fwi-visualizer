@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta
 import folium
 from folium import Element
 
@@ -7,14 +8,17 @@ def main():
     with open("fars.geojson", "r", encoding="utf-8") as f:
         geojson_data = json.load(f)
 
-    # 2. ایجاد نقشه با مرکزیت استان فارس
+    # تاریخ روز جاری یا دیروز برای فراخوانی لایه ماهواره‌ای ناسا
+    today_str = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # 2. ایجاد نقشه پایه با مرکزیت استان فارس
     m = folium.Map(
         location=[29.6, 53.0],
         zoom_start=7,
         tiles=None
     )
 
-    # لایه‌های نقشه پایه (بدون نیاز به کلید و بدون واترمارک)
+    # نقشه ماهواره‌ای باکیفیت Esri
     folium.TileLayer(
         tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         attr="Esri World Imagery",
@@ -23,59 +27,59 @@ def main():
         control=True
     ).add_to(m)
 
+    # نقشه توپوگرافی و راه‌ها
     folium.TileLayer(
         tiles="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         attr="OpenStreetMap contributors",
-        name="نقشه راه‌ها",
+        name="نقشه راه‌ها و توپوگرافی",
         overlay=False,
         control=True
     ).add_to(m)
 
-    # 3. لایه WMS مستقیم شاخص رسمی و محاسبه‌شده FWI از سازمان پایش آتش اتحادیه اروپا/جهانی (EFFIS)
-    folium.WmsTileLayer(
-        url="https://ies-ows.jrc.ec.europa.eu/effis",
-        layers="ecmwf007.fwi",
-        fmt="image/png",
-        transparent=True,
-        opacity=0.65,
-        name="شاخص FWI محاسبه‌شده جهانی (EFFIS/ECMWF)",
+    # 3. لایه پایش حرارتی و حریق ناسا (NASA GIBS / VIIRS Thermal Anomalies)
+    nasa_fire_url = (
+        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/"
+        "VIIRS_SNPP_Thermal_Anomalies_375m_All/default/"
+        f"{today_str}/GoogleMapsCompatible_Level8/{{z}}/{{y}}/{{x}}.png"
+    )
+    folium.TileLayer(
+        tiles=nasa_fire_url,
+        attr="NASA Global Imagery Browse Services (GIBS)",
+        name="نقاط داغ و پایش حرارتی ناسا (VIIRS)",
         overlay=True,
-        control=True
+        control=True,
+        opacity=0.9
     ).add_to(m)
 
-    # 4. انداختن کادر مرز استان فارس روی لایه
+    # 4. ترسیم خط مرزی استان فارس
     folium.GeoJson(
         geojson_data,
         name="مرز استان فارس",
         style_function=lambda x: {
             "fillColor": "transparent",
-            "color": "#d90429",
-            "weight": 2.5,
-            "dashArray": "4, 4"
+            "color": "#e63946",
+            "weight": 3,
+            "dashArray": "5, 5"
         }
     ).add_to(m)
 
-    # 5. راهنمای تصویری رسمی رده‌بندی FWI
-    legend_html = """
-    <div style="position: fixed; bottom: 30px; left: 30px; z-index: 1000; background: white;
-                padding: 12px 16px; border-radius: 8px; border: 1px solid #ccc; font-family: Tahoma;
-                direction: rtl; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
-        <b style="font-size: 13px;">شاخص خطر آتش‌سوزی (FWI)</b><br>
-        <span style="font-size: 11px; color: #666;">منبع: لایه ماهواره‌ای ECMWF / EFFIS</span>
-        <hr style="margin: 6px 0;">
-        <i style="background:#2b83ba; width:15px; height:15px; float:right; margin-left:8px; opacity:0.8;"></i> بسیار کم (Very Low)<br>
-        <i style="background:#abdda4; width:15px; height:15px; float:right; margin-left:8px; opacity:0.8;"></i> کم (Low)<br>
-        <i style="background:#ffffbf; width:15px; height:15px; float:right; margin-left:8px; opacity:0.8;"></i> متوسط (Moderate)<br>
-        <i style="background:#fdae61; width:15px; height:15px; float:right; margin-left:8px; opacity:0.8;"></i> بالا (High)<br>
-        <i style="background:#d7191c; width:15px; height:15px; float:right; margin-left:8px; opacity:0.8;"></i> بسیار بالا (Very High)<br>
-        <i style="background:#7a0177; width:15px; height:15px; float:right; margin-left:8px; opacity:0.8;"></i> بحرانی (Extreme)
+    # 5. راهنمای نقشه
+    legend_html = f"""
+    <div style="position: fixed; bottom: 25px; left: 25px; z-index: 1000; background: rgba(255,255,255,0.95);
+                padding: 12px 16px; border-radius: 8px; border: 1px solid #bbb; font-family: Tahoma;
+                direction: rtl; font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.25);">
+        <b style="font-size: 13px; color: #1d3557;">سامانه پایش خطر حریق استان فارس</b><br>
+        <span style="font-size: 11px; color: #555;">منبع داده: ماهواره‌های پایش حریق NASA GIBS</span>
+        <hr style="margin: 6px 0; border-top: 1px solid #ddd;">
+        <span style="display: inline-block; width: 12px; height: 12px; background: #e63946; border-radius: 50%; margin-left: 6px;"></span>
+        پایش و انطباق روزانه: <b>{today_str}</b>
     </div>
     """
     m.get_root().html.add_child(Element(legend_html))
     folium.LayerControl(position="topright").add_to(m)
 
     m.save("index.html")
-    print("Map generated with official pre-calculated FWI WMS layer.")
+    print("Map built successfully with live NASA layer.")
 
 if __name__ == "__main__":
     main()
